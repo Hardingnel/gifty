@@ -1,0 +1,6 @@
+{
+  "google_sheet_url": "",
+  "input_csv_path": "data/sample_raw_responses.csv",
+  "output_excel_path": "output/survey_kpi_dashboard.xlsx",
+  "auto_open_excel": true
+}
