@@ -621,7 +621,8 @@ export default function SurveyForm({ onSurveySubmitted }: SurveyFormProps) {
                   'Friendships and peer relationships', 'Family relationships/responsibilities',
                   'Student organizations or clubs', 'Volunteering/community activities', 'Leadership roles',
                   'Religious or faith-based activities', 'Sports or recreational activities',
-                  'Work/business alongside university', 'Social activities'
+                  'Work/business alongside university', 'Social activities',
+                  'I am not currently involved in activities outside my coursework'
                 ].map(item => {
                   const checked = formData.q15_social_involvement.includes(item);
                   return (
@@ -666,7 +667,8 @@ export default function SurveyForm({ onSurveySubmitted }: SurveyFormProps) {
                   'Building healthy relationships', 'Communication', 'Handling conflict',
                   'Leadership', 'Teamwork', 'Finding and using student opportunities',
                   'Getting involved in organizations/community activities',
-                  'Balancing activities with academic responsibilities', 'Building a sense of belonging/community'
+                  'Balancing activities with academic responsibilities', 'Building a sense of belonging/community',
+                  'None'
                 ].map(item => {
                   const checked = formData.q17_social_guidance_desired.includes(item);
                   return (
@@ -751,6 +753,32 @@ export default function SurveyForm({ onSurveySubmitted }: SurveyFormProps) {
                     {opt}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-2">
+                Q21. Where do you currently get most of your career or future-related guidance? (Select up to 3)
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {[
+                  'University/lecturers', 'Career services', 'Family', 'Friends/peers',
+                  'Mentors', 'Professional networks', 'Social media/internet', 'Personal experience',
+                  'I mostly figure it out myself', "I currently don't receive much guidance"
+                ].map(item => {
+                  const checked = formData.q21_career_source.includes(item);
+                  return (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => toggleCheckbox('q21_career_source', item)}
+                      className={`p-2.5 text-xs text-left rounded-lg border transition flex items-center justify-between ${checked ? 'bg-blue-50 border-blue-500 text-blue-900 font-bold' : 'border-slate-200 hover:bg-slate-50'}`}
+                    >
+                      <span>{item}</span>
+                      {checked && <CheckCircle2 className="h-4 w-4 text-blue-600 flex-shrink-0" />}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>

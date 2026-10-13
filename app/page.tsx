@@ -17,7 +17,14 @@ import {
   Quote,
   Layers,
   ChevronRight,
-  ExternalLink
+  Heart,
+  Compass,
+  Users,
+  Briefcase,
+  Award,
+  Sparkles,
+  BarChart3,
+  PieChart as PieIcon
 } from 'lucide-react';
 import {
   PieChart,
@@ -35,14 +42,117 @@ import {
 import {
   SurveyRecord,
   ResearchKPIs,
+  DistributionItem,
   parseSurveyCSV,
-  computeKPIs,
-  convertGoogleSheetsUrl
+  computeKPIs
 } from '../lib/survey-parser';
 import { exportCleanExcel } from '../lib/excel-export';
 import SurveyForm from '../components/SurveyForm';
 
-const COLORS_PIE = ['#10B981', '#2563EB', '#EF4444', '#F59E0B'];
+const PALETTE = ['#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
+const PIE_COLORS = ['#10B981', '#2563EB', '#F59E0B', '#EF4444', '#8B5CF6', '#64748B'];
+
+interface QuestionCardProps {
+  qNumber: string;
+  title: string;
+  subtitle: string;
+  data: DistributionItem[];
+  chartType?: 'bar' | 'donut';
+  barColor?: string;
+}
+
+function QuestionCard({ qNumber, title, subtitle, data, chartType = 'bar', barColor = '#2563EB' }: QuestionCardProps) {
+  const chartData = data && data.length > 0 ? data : [{ name: 'No data', count: 0, pct: 0 }];
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col justify-between">
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md uppercase tracking-wider">
+            {qNumber}
+          </span>
+          <span className="text-[11px] text-slate-400 font-medium">{subtitle}</span>
+        </div>
+        <h4 className="text-sm font-bold text-slate-900 leading-snug">{title}</h4>
+      </div>
+
+      {/* Chart Container */}
+      <div className="h-60 w-full mb-4">
+        <ResponsiveContainer width="100%" height="100%">
+          {chartType === 'donut' ? (
+            <PieChart>
+              <Pie
+                data={chartData}
+                innerRadius={55}
+                outerRadius={85}
+                paddingAngle={3}
+                dataKey="count"
+                nameKey="name"
+                label={({ name, percent }) => `${name.length > 18 ? name.slice(0, 16) + '...' : name}: ${(percent * 100).toFixed(0)}%`}
+              >
+                {chartData.map((_, idx) => (
+                  <Cell key={`cell-${idx}`} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(val: any, name: any, item: any) => [`${val} (${(item.payload.pct * 100).toFixed(1)}%)`, 'Responses']} />
+            </PieChart>
+          ) : (
+            <BarChart
+              layout="vertical"
+              data={chartData.slice(0, 8)}
+              margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
+              <XAxis
+                type="number"
+                tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`}
+                domain={[0, 1]}
+                tick={{ fontSize: 10, fill: '#64748B' }}
+              />
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={130}
+                tick={{ fontSize: 10, fill: '#334155' }}
+                tickFormatter={(v: string) => (v.length > 22 ? v.slice(0, 20) + '...' : v)}
+              />
+              <Tooltip formatter={(v: number, _: any, item: any) => [`${(v * 100).toFixed(1)}% (${item.payload.count} students)`, 'Share']} />
+              <Bar dataKey="pct" fill={barColor} radius={[0, 4, 4, 0]} />
+            </BarChart>
+          )}
+        </ResponsiveContainer>
+      </div>
+
+      {/* Detailed Frequency & Distribution Table */}
+      <div className="border-t border-slate-100 pt-3">
+        <div className="max-h-40 overflow-y-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-1">
+                <th className="pb-1">Response Option</th>
+                <th className="pb-1 text-right">Count</th>
+                <th className="pb-1 text-right">Share</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50 text-slate-700">
+              {chartData.map((item, idx) => (
+                <tr key={idx} className="hover:bg-slate-50">
+                  <td className="py-1.5 pr-2 font-medium truncate max-w-[200px]" title={item.name}>
+                    {item.name}
+                  </td>
+                  <td className="py-1.5 text-right font-mono text-[11px] text-slate-500">{item.count}</td>
+                  <td className="py-1.5 text-right font-bold text-slate-900">
+                    {(item.pct * 100).toFixed(1)}%
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const [csvData, setCsvData] = useState<string>('');
@@ -52,16 +162,17 @@ export default function DashboardPage() {
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [showUrlModal, setShowUrlModal] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'survey' | 'qualitative' | 'dataset'>('dashboard');
+  const [dashboardSection, setDashboardSection] = useState<
+    'overview' | 'sec1' | 'sec2' | 'sec3' | 'sec4' | 'sec5' | 'sec6' | 'sec7' | 'sec8' | 'sec9'
+  >('overview');
   const [submittedRecords, setSubmittedRecords] = useState<SurveyRecord[]>([]);
 
-  // Filters
+  // Demographic Filters
   const [filterLevel, setFilterLevel] = useState<string>('All');
   const [filterInst, setFilterInst] = useState<string>('All');
   const [filterGender, setFilterGender] = useState<string>('All');
   const [searchQuote, setSearchQuote] = useState<string>('');
-  const [searchTerm, setSearchTerm] = useState<string>('');
 
-  // Initial Data Load
   useEffect(() => {
     const savedUrl = localStorage.getItem('survey_sheet_url');
     if (savedUrl) {
@@ -78,7 +189,7 @@ export default function DashboardPage() {
     setErrorMsg('');
     try {
       const res = await fetch('/sample_raw_responses.csv');
-      if (!res.ok) throw new Error('Failed to load sample data.');
+      if (!res.ok) throw new Error('Failed to load initial dataset.');
       const text = await res.text();
       setCsvData(text);
     } catch (err: any) {
@@ -103,7 +214,7 @@ export default function DashboardPage() {
       }
       const text = await res.text();
       if (!text || text.trim().length === 0) {
-        throw new Error('Received an empty response from the provided Google link.');
+        throw new Error('Received an empty response from the provided Google Sheet link.');
       }
       setCsvData(text);
       localStorage.setItem('survey_sheet_url', url.trim());
@@ -116,18 +227,16 @@ export default function DashboardPage() {
     }
   };
 
-  // Parse Raw & Clean Records
+  // Parsing & Merging Records
   const { raw, clean } = useMemo(() => {
     if (!csvData) return { raw: [], clean: [] };
     return parseSurveyCSV(csvData);
   }, [csvData]);
 
-  // Combined Clean Records (Fetched CSV + Live Submitted on Web)
   const allClean = useMemo(() => {
     return [...submittedRecords, ...clean];
   }, [submittedRecords, clean]);
 
-  // Available Filter Options
   const studyLevels = useMemo(() => {
     const set = new Set(allClean.map(r => r.Level_of_Study).filter(Boolean));
     return ['All', ...Array.from(set)];
@@ -143,7 +252,6 @@ export default function DashboardPage() {
     return ['All', ...Array.from(set)];
   }, [allClean]);
 
-  // Filtered Records
   const filteredRecords = useMemo(() => {
     return allClean.filter(r => {
       const matchLevel = filterLevel === 'All' || r.Level_of_Study === filterLevel;
@@ -153,13 +261,11 @@ export default function DashboardPage() {
     });
   }, [allClean, filterLevel, filterInst, filterGender]);
 
-  // Recomputed KPIs
   const kpis: ResearchKPIs | null = useMemo(() => {
     if (filteredRecords.length === 0) return null;
     return computeKPIs(filteredRecords);
   }, [filteredRecords]);
 
-  // Qualitative Rows
   const qualRecords = useMemo(() => {
     return filteredRecords
       .filter(r => (r.q26_wish_taught && r.q26_wish_taught.length > 0) || (r.q27_general_recommendations && r.q27_general_recommendations.length > 0))
@@ -182,7 +288,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-      {/* TOP NAVBAR */}
+      {/* HEADER */}
       <header className="sticky top-0 z-30 bg-slate-900 border-b border-slate-800 text-white shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center space-x-3">
@@ -253,14 +359,14 @@ export default function DashboardPage() {
                 2. In the Google Sheet, click <strong>Share</strong> (top right) &gt; set to <strong>"Anyone with the link can view"</strong> &gt; <strong>Copy link</strong>.</span>
               </div>
               <div className="pt-2 border-t border-slate-200">
-                <strong className="text-blue-700 font-semibold block">Option 2: Google Apps Script Web App</strong>
-                <span>If using an Apps Script Web App URL (<code className="bg-slate-200 px-1 py-0.5 rounded text-[10px]">.../exec</code>), make sure in Apps Script Deploy settings that <strong>"Who has access"</strong> is set to <strong>"Anyone"</strong>.</span>
+                <strong className="text-blue-700 font-semibold block">Option 2: Direct Google Form Submissions</strong>
+                <span>You can also share the web survey directly with respondents by clicking <strong>"Take Survey"</strong>.</span>
               </div>
             </div>
 
             <input
               type="text"
-              placeholder="Paste Google Sheet URL (https://docs.google.com/spreadsheets/d/...) or Apps Script URL"
+              placeholder="Paste Google Sheet URL (https://docs.google.com/spreadsheets/d/...)"
               value={inputUrl}
               onChange={e => setInputUrl(e.target.value)}
               className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
@@ -284,9 +390,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* MAIN CONTENT AREA */}
+      {/* MAIN CONTAINER */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
-        {/* ERROR NOTIFICATION */}
         {errorMsg && (
           <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2.5">
             <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0" />
@@ -294,9 +399,8 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* TOP FILTER & NAVIGATION BAR */}
+        {/* PRIMARY APP NAVIGATION TABS */}
         <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-          {/* Navigation Tabs */}
           <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs font-semibold">
             <button
               onClick={() => setActiveTab('dashboard')}
@@ -324,7 +428,7 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          {/* Demographic Filters */}
+          {/* DEMOGRAPHIC FILTERS */}
           <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
             <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
               <Filter className="h-3.5 w-3.5 text-slate-400" />
@@ -377,7 +481,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* EMPTY STATE: ZERO RESPONSES COLLECTED */}
+        {/* EMPTY STATE */}
         {!isLoading && allClean.length === 0 && activeTab !== 'survey' && (
           <div className="py-16 px-6 text-center bg-white rounded-2xl border border-slate-200 shadow-sm max-w-2xl mx-auto my-8">
             <div className="h-16 w-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100">
@@ -404,7 +508,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* EMPTY STATE: FILTER MISMATCH */}
+        {/* NO FILTER MATCH */}
         {!isLoading && allClean.length > 0 && filteredRecords.length === 0 && activeTab !== 'survey' && (
           <div className="py-12 text-center bg-white rounded-xl border border-slate-200 my-6">
             <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto mb-2" />
@@ -413,7 +517,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* TAB 1: EXECUTIVE RESEARCH DASHBOARD */}
+        {/* TAB 1: RESEARCH KPIS & VISUALIZATIONS */}
         {!isLoading && activeTab === 'dashboard' && kpis && (
           <div className="space-y-6">
             {/* 6 RESEARCH SCORECARDS */}
@@ -455,188 +559,549 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* CHARTS ROW 1 */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Chart 1: Course Utility Donut */}
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">Foundation Course Utility Endorsement (Q24)</h3>
-                    <p className="text-xs text-slate-500">Central Research Question - Student demand evaluation</p>
+            {/* SECTION SELECTOR SUB-NAVIGATION */}
+            <div className="bg-white rounded-xl border border-slate-200 p-2 shadow-sm">
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2 pt-1 pb-2">
+                Analyze by Survey Section (All 27 Questions):
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { id: 'overview', label: '📊 Executive Overview' },
+                  { id: 'sec1', label: '👤 Sec 1: Profile' },
+                  { id: 'sec2', label: '🧭 Sec 2: Experience (Q1-3)' },
+                  { id: 'sec3', label: '⏰ Sec 3: Time (Q4-6)' },
+                  { id: 'sec4', label: '🌱 Sec 4: Personal Dev (Q7-9)' },
+                  { id: 'sec5', label: '❤️ Sec 5: Wellbeing (Q10-11)' },
+                  { id: 'sec6', label: '💰 Sec 6: Finance (Q12-14)' },
+                  { id: 'sec7', label: '👥 Sec 7: Social Life (Q15-17)' },
+                  { id: 'sec8', label: '🎯 Sec 8: Career Prep (Q18-21)' },
+                  { id: 'sec9', label: '🎓 Sec 9: Foundation Course (Q22-25)' }
+                ].map(sec => (
+                  <button
+                    key={sec.id}
+                    onClick={() => setDashboardSection(sec.id as any)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      dashboardSection === sec.id
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    {sec.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* VIEW 0: EXECUTIVE OVERVIEW */}
+            {dashboardSection === 'overview' && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Chart 1: Course Utility Donut */}
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">Foundation Course Utility Endorsement (Q24)</h3>
+                        <p className="text-xs text-slate-500">Central Research Question - Student demand evaluation</p>
+                      </div>
+                      <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full">
+                        {(kpis.course_endorsement_pct * 100).toFixed(1)}% Endorse
+                      </span>
+                    </div>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={kpis.course_utility_breakdown}
+                            innerRadius={60}
+                            outerRadius={95}
+                            paddingAngle={4}
+                            dataKey="count"
+                            nameKey="name"
+                            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                          >
+                            {kpis.course_utility_breakdown.map((_, index) => (
+                              <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value: any, _: any, item: any) => [`${value} (${(item.payload.pct * 100).toFixed(1)}%)`, 'Responses']} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
-                  <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full">
-                    {(kpis.course_endorsement_pct * 100).toFixed(1)}% Endorse
-                  </span>
-                </div>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={kpis.course_utility_breakdown}
-                        innerRadius={60}
-                        outerRadius={95}
-                        paddingAngle={4}
-                        dataKey="value"
-                        nameKey="name"
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                      >
-                        {kpis.course_utility_breakdown.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS_PIE[index % COLORS_PIE.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value: any) => [`${value} students`, 'Responses']} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
 
-              {/* Chart 2: Priority Needs Horizontal Bar */}
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">Top Priority Areas Demanded for Structured Guidance (Q23)</h3>
-                    <p className="text-xs text-slate-500">% of students voting for each domain (up to 5 choices)</p>
+                  {/* Chart 2: Priority Needs Horizontal Bar */}
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">Top Priority Areas Demanded for Structured Guidance (Q23)</h3>
+                        <p className="text-xs text-slate-500">% of students voting for each domain (up to 5 choices)</p>
+                      </div>
+                    </div>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          layout="vertical"
+                          data={kpis.priority_areas}
+                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
+                          <XAxis type="number" tickFormatter={(val: number) => `${(val * 100).toFixed(0)}%`} domain={[0, 1]} tick={{ fontSize: 11 }} />
+                          <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 10, fill: '#475569' }} />
+                          <Tooltip formatter={(val: number) => [`${(val * 100).toFixed(1)}%`, 'Students']} />
+                          <Bar dataKey="pct" fill="#6366F1" radius={[0, 4, 4, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
                 </div>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      layout="vertical"
-                      data={kpis.priority_areas}
-                      margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
-                      <XAxis type="number" tickFormatter={(val: number) => `${(val * 100).toFixed(0)}%`} domain={[0, 1]} tick={{ fontSize: 11 }} />
-                      <YAxis type="category" dataKey="choice" width={140} tick={{ fontSize: 10, fill: '#475569' }} />
-                      <Tooltip formatter={(val: number) => [`${(val * 100).toFixed(1)}%`, 'Students']} />
-                      <Bar dataKey="pct" fill="#6366F1" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
 
-            {/* CHARTS ROW 2 */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Chart 3: Institutional Support Deficit Matrix */}
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                <div className="mb-4">
-                  <h3 className="text-sm font-bold text-slate-900">Institutional Support Deficit Across 5 Pillars</h3>
-                  <p className="text-xs text-slate-500">% reporting receiving None or Very Little guidance from university</p>
-                </div>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={kpis.support_deficit} margin={{ top: 10, right: 20, left: 0, bottom: 25 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
-                      <XAxis dataKey="domain" tick={{ fontSize: 10, fill: '#475569' }} interval={0} angle={-15} textAnchor="end" />
-                      <YAxis tickFormatter={(val: number) => `${(val * 100).toFixed(0)}%`} domain={[0, 1]} tick={{ fontSize: 11 }} />
-                      <Tooltip formatter={(val: number) => [`${(val * 100).toFixed(1)}%`, 'Deficit Rate']} />
-                      <Bar dataKey="pct" fill="#EF4444" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Chart 3: Institutional Support Deficit Matrix */}
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <div className="mb-4">
+                      <h3 className="text-sm font-bold text-slate-900">Institutional Support Deficit Across 5 Pillars</h3>
+                      <p className="text-xs text-slate-500">% reporting receiving None or Very Little guidance from university</p>
+                    </div>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={kpis.support_deficit} margin={{ top: 10, right: 20, left: 0, bottom: 25 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                          <XAxis dataKey="domain" tick={{ fontSize: 10, fill: '#475569' }} interval={0} angle={-15} textAnchor="end" />
+                          <YAxis tickFormatter={(val: number) => `${(val * 100).toFixed(0)}%`} domain={[0, 1]} tick={{ fontSize: 11 }} />
+                          <Tooltip formatter={(val: number) => [`${(val * 100).toFixed(1)}%`, 'Deficit Rate']} />
+                          <Bar dataKey="pct" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
 
-              {/* Chart 4: Preferred Course Format */}
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                <div className="mb-4">
-                  <h3 className="text-sm font-bold text-slate-900">Preferred Learning Format for Foundation Course (Q25)</h3>
-                  <p className="text-xs text-slate-500">Student pedagogical preference ranking</p>
+                  {/* Chart 4: Preferred Course Format */}
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <div className="mb-4">
+                      <h3 className="text-sm font-bold text-slate-900">Preferred Learning Format for Foundation Course (Q25)</h3>
+                      <p className="text-xs text-slate-500">Student pedagogical preference ranking</p>
+                    </div>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          layout="vertical"
+                          data={kpis.preferred_formats}
+                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
+                          <XAxis type="number" tickFormatter={(val: number) => `${(val * 100).toFixed(0)}%`} tick={{ fontSize: 11 }} />
+                          <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 10, fill: '#475569' }} />
+                          <Tooltip formatter={(val: number) => [`${(val * 100).toFixed(1)}%`, 'Preference']} />
+                          <Bar dataKey="pct" fill="#0EA5E9" radius={[0, 4, 4, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
                 </div>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      layout="vertical"
-                      data={kpis.preferred_formats}
-                      margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
-                      <XAxis type="number" tickFormatter={(val: number) => `${(val * 100).toFixed(0)}%`} tick={{ fontSize: 11 }} />
-                      <YAxis type="category" dataKey="choice" width={150} tick={{ fontSize: 10, fill: '#475569' }} />
-                      <Tooltip formatter={(val: number) => [`${(val * 100).toFixed(1)}%`, 'Preference']} />
-                      <Bar dataKey="pct" fill="#0EA5E9" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
 
-            {/* CHARTS ROW 3 */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Chart 5: Cross-Tab by Level of Study */}
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                <div className="mb-4">
-                  <h3 className="text-sm font-bold text-slate-900">Preparation Deficit by Level of Study (Cross-Tab)</h3>
-                  <p className="text-xs text-slate-500">Comparing post-graduation anxiety vs university inadequacy across academic years</p>
-                </div>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={kpis.study_level_crosstab} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
-                      <XAxis dataKey="level" tick={{ fontSize: 11 }} />
-                      <YAxis tickFormatter={(val: number) => `${(val * 100).toFixed(0)}%`} domain={[0, 1]} tick={{ fontSize: 11 }} />
-                      <Tooltip formatter={(val: number) => [`${(val * 100).toFixed(1)}%`]} />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Bar dataKey="postgrad_unprepared_pct" name="Unprepared for Post-Grad" fill="#F97316" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="inadequate_pct" name="Univ Inadequately Prepares" fill="#EF4444" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Chart 5: Cross-Tab by Level of Study */}
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <div className="mb-4">
+                      <h3 className="text-sm font-bold text-slate-900">Preparation Deficit by Level of Study (Cross-Tab)</h3>
+                      <p className="text-xs text-slate-500">Comparing post-graduation anxiety vs university inadequacy across academic years</p>
+                    </div>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={kpis.study_level_crosstab} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                          <XAxis dataKey="level" tick={{ fontSize: 11 }} />
+                          <YAxis tickFormatter={(val: number) => `${(val * 100).toFixed(0)}%`} domain={[0, 1]} tick={{ fontSize: 11 }} />
+                          <Tooltip formatter={(val: number) => [`${(val * 100).toFixed(1)}%`]} />
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
+                          <Bar dataKey="postgrad_unprepared_pct" name="Unprepared for Post-Grad" fill="#F97316" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="inadequate_pct" name="Univ Inadequately Prepares" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
 
-              {/* Chart 6: Areas Managed Beyond Classes */}
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                <div className="mb-4">
-                  <h3 className="text-sm font-bold text-slate-900">Non-Academic Areas Managed by Students (Q1)</h3>
-                  <p className="text-xs text-slate-500">Domains students must balance alongside coursework</p>
+                  {/* Chart 6: Areas Managed Beyond Classes */}
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <div className="mb-4">
+                      <h3 className="text-sm font-bold text-slate-900">Non-Academic Areas Managed by Students (Q1)</h3>
+                      <p className="text-xs text-slate-500">Domains students must balance alongside coursework</p>
+                    </div>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          layout="vertical"
+                          data={kpis.areas_managed}
+                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
+                          <XAxis type="number" tickFormatter={(val: number) => `${(val * 100).toFixed(0)}%`} tick={{ fontSize: 11 }} />
+                          <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 10, fill: '#475569' }} />
+                          <Tooltip formatter={(val: number) => [`${(val * 100).toFixed(1)}%`, 'Students']} />
+                          <Bar dataKey="pct" fill="#14B8A6" radius={[0, 4, 4, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
                 </div>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      layout="vertical"
-                      data={kpis.areas_managed}
-                      margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
-                      <XAxis type="number" tickFormatter={(val: number) => `${(val * 100).toFixed(0)}%`} tick={{ fontSize: 11 }} />
-                      <YAxis type="category" dataKey="choice" width={140} tick={{ fontSize: 10, fill: '#475569' }} />
-                      <Tooltip formatter={(val: number) => [`${(val * 100).toFixed(1)}%`, 'Students']} />
-                      <Bar dataKey="pct" fill="#14B8A6" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
 
-            {/* EXECUTIVE RESEARCH SUMMARY CALLOUT */}
-            <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-xl border border-slate-800">
-              <h3 className="text-base font-bold mb-3 flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-                Executive Research Findings & Policy Recommendations
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-300 leading-relaxed">
-                <div className="p-3.5 bg-slate-800/60 rounded-xl border border-slate-700/60">
-                  <strong className="text-white block mb-1">1. Overwhelming Foundation Course Mandate</strong>
-                  {(kpis.course_endorsement_pct * 100).toFixed(1)}% of surveyed students advocate for the introduction of a structured University Life Management Course, with {(kpis.course_very_useful_pct * 100).toFixed(1)}% emphasizing it is "Very Useful".
-                </div>
-                <div className="p-3.5 bg-slate-800/60 rounded-xl border border-slate-700/60">
-                  <strong className="text-white block mb-1">2. Critical Institutional Support Void</strong>
-                  {(kpis.inadequate_pct * 100).toFixed(1)}% report that universities prepare them inadequately for life beyond textbooks, while {(kpis.no_time_guidance_pct * 100).toFixed(1)}% received zero guidance on time management.
-                </div>
-                <div className="p-3.5 bg-slate-800/60 rounded-xl border border-slate-700/60">
-                  <strong className="text-white block mb-1">3. Acute Post-Graduation Uncertainty</strong>
-                  {(kpis.unprepared_postgrad_pct * 100).toFixed(1)}% of students express high anxiety and lack of preparedness for life after graduation, particularly peaking in senior study cohorts.
-                </div>
-                <div className="p-3.5 bg-slate-800/60 rounded-xl border border-slate-700/60">
-                  <strong className="text-white block mb-1">4. Student-Preferred Course Delivery</strong>
-                  The top student-endorsed format is an integrated credit-bearing curriculum course followed by intensive practical workshops and mentorship.
+                {/* EXECUTIVE FINDINGS CALLOUT */}
+                <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-xl border border-slate-800">
+                  <h3 className="text-base font-bold mb-3 flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                    Executive Research Findings & Policy Recommendations
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-300 leading-relaxed">
+                    <div className="p-3.5 bg-slate-800/60 rounded-xl border border-slate-700/60">
+                      <strong className="text-white block mb-1">1. Overwhelming Foundation Course Mandate</strong>
+                      {(kpis.course_endorsement_pct * 100).toFixed(1)}% of surveyed students advocate for the introduction of a structured University Life Management Course, with {(kpis.course_very_useful_pct * 100).toFixed(1)}% emphasizing it is "Very Useful".
+                    </div>
+                    <div className="p-3.5 bg-slate-800/60 rounded-xl border border-slate-700/60">
+                      <strong className="text-white block mb-1">2. Critical Institutional Support Void</strong>
+                      {(kpis.inadequate_pct * 100).toFixed(1)}% report that universities prepare them inadequately for life beyond textbooks, while {(kpis.no_time_guidance_pct * 100).toFixed(1)}% received zero guidance on time management.
+                    </div>
+                    <div className="p-3.5 bg-slate-800/60 rounded-xl border border-slate-700/60">
+                      <strong className="text-white block mb-1">3. Acute Post-Graduation Uncertainty</strong>
+                      {(kpis.unprepared_postgrad_pct * 100).toFixed(1)}% of students express high anxiety and lack of preparedness for life after graduation, particularly peaking in senior study cohorts.
+                    </div>
+                    <div className="p-3.5 bg-slate-800/60 rounded-xl border border-slate-700/60">
+                      <strong className="text-white block mb-1">4. Student-Preferred Course Delivery</strong>
+                      The top student-endorsed format is an integrated credit-bearing curriculum course followed by intensive practical workshops and mentorship.
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            {/* VIEW 1: SECTION 1 PARTICIPANT PROFILE */}
+            {dashboardSection === 'sec1' && (
+              <div className="space-y-6">
+                <div className="bg-white p-4 rounded-xl border border-slate-200">
+                  <h3 className="text-sm font-bold text-slate-900">Section 1: Participant Demographic Profile</h3>
+                  <p className="text-xs text-slate-500">Sample distribution by study level, gender, institution type, and age group</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <QuestionCard
+                    qNumber="Demographic 1"
+                    title="Gender Distribution"
+                    subtitle="Single Choice"
+                    data={kpis.demographics.gender}
+                    chartType="donut"
+                  />
+                  <QuestionCard
+                    qNumber="Demographic 2"
+                    title="Current Level of Study"
+                    subtitle="Academic Cohort"
+                    data={kpis.demographics.level}
+                    chartType="donut"
+                  />
+                  <QuestionCard
+                    qNumber="Demographic 3"
+                    title="Type of Institution"
+                    subtitle="Public vs Private"
+                    data={kpis.demographics.institution}
+                    chartType="donut"
+                  />
+                  <QuestionCard
+                    qNumber="Demographic 4"
+                    title="Age Group"
+                    subtitle="Respondent Demographics"
+                    data={kpis.demographics.age}
+                    chartType="donut"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 2: SECTION 2 UNIVERSITY LIFE EXPERIENCE */}
+            {dashboardSection === 'sec2' && (
+              <div className="space-y-6">
+                <div className="bg-white p-4 rounded-xl border border-slate-200">
+                  <h3 className="text-sm font-bold text-slate-900">Section 2: University Life Experience</h3>
+                  <p className="text-xs text-slate-500">Examining non-academic life responsibilities, feelings of preparedness, and skill learning origins</p>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <QuestionCard
+                    qNumber="Question 1"
+                    title="Areas Managed Beyond Coursework"
+                    subtitle="Select all that apply"
+                    data={kpis.section2_experience.q1_areas_managed}
+                    chartType="bar"
+                    barColor="#2563EB"
+                  />
+                  <QuestionCard
+                    qNumber="Question 2"
+                    title="Preparedness to Manage University Life Demands"
+                    subtitle="Single Choice"
+                    data={kpis.section2_experience.q2_preparedness}
+                    chartType="donut"
+                  />
+                  <QuestionCard
+                    qNumber="Question 3"
+                    title="How Skills Were Learned"
+                    subtitle="Select up to 3"
+                    data={kpis.section2_experience.q3_skills_source}
+                    chartType="bar"
+                    barColor="#10B981"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 3: SECTION 3 TIME MANAGEMENT & ORGANIZATION */}
+            {dashboardSection === 'sec3' && (
+              <div className="space-y-6">
+                <div className="bg-white p-4 rounded-xl border border-slate-200">
+                  <h3 className="text-sm font-bold text-slate-900">Section 3: Time Management & Organization</h3>
+                  <p className="text-xs text-slate-500">Assessing students' self-management systems, difficult balancing areas, and institutional training receipt</p>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <QuestionCard
+                    qNumber="Question 4"
+                    title="Current Time Management Approach"
+                    subtitle="Single Choice"
+                    data={kpis.section3_time.q4_time_system}
+                    chartType="bar"
+                    barColor="#8B5CF6"
+                  />
+                  <QuestionCard
+                    qNumber="Question 5"
+                    title="Most Difficult Areas to Balance"
+                    subtitle="Select up to 3"
+                    data={kpis.section3_time.q5_difficult_balance}
+                    chartType="bar"
+                    barColor="#EF4444"
+                  />
+                  <QuestionCard
+                    qNumber="Question 6"
+                    title="Received Structured Guidance on Time Management"
+                    subtitle="Yes / No"
+                    data={kpis.section3_time.q6_time_guidance}
+                    chartType="donut"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 4: SECTION 4 PERSONAL DEVELOPMENT */}
+            {dashboardSection === 'sec4' && (
+              <div className="space-y-6">
+                <div className="bg-white p-4 rounded-xl border border-slate-200">
+                  <h3 className="text-sm font-bold text-slate-900">Section 4: Personal Development & Self-Management</h3>
+                  <p className="text-xs text-slate-500">Valued skills, institutional development opportunities, and areas where students seek structured guidance</p>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <QuestionCard
+                    qNumber="Question 7"
+                    title="Personal Development Areas Considered Important"
+                    subtitle="Select up to 4"
+                    data={kpis.section4_personal_dev.q7_personal_dev_important}
+                    chartType="bar"
+                    barColor="#3B82F6"
+                  />
+                  <QuestionCard
+                    qNumber="Question 8"
+                    title="Guidance Received Through University"
+                    subtitle="Single Choice"
+                    data={kpis.section4_personal_dev.q8_personal_dev_received}
+                    chartType="donut"
+                  />
+                  <QuestionCard
+                    qNumber="Question 9"
+                    title="Personal Development Areas Most Desired"
+                    subtitle="Select up to 3"
+                    data={kpis.section4_personal_dev.q9_personal_dev_desired}
+                    chartType="bar"
+                    barColor="#10B981"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 5: SECTION 5 WELLBEING & STRESS */}
+            {dashboardSection === 'sec5' && (
+              <div className="space-y-6">
+                <div className="bg-white p-4 rounded-xl border border-slate-200">
+                  <h3 className="text-sm font-bold text-slate-900">Section 5: Wellbeing & Managing University Pressure</h3>
+                  <p className="text-xs text-slate-500">Student coping strategies when stressed and perceived institutional wellbeing support</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <QuestionCard
+                    qNumber="Question 10"
+                    title="Coping Strategies When Stressed or Overwhelmed"
+                    subtitle="Select up to 3"
+                    data={kpis.section5_wellbeing.q10_stress_coping}
+                    chartType="bar"
+                    barColor="#EC4899"
+                  />
+                  <QuestionCard
+                    qNumber="Question 11"
+                    title="University Guidance/Support on Stress & Wellbeing"
+                    subtitle="Single Choice"
+                    data={kpis.section5_wellbeing.q11_wellbeing_received}
+                    chartType="donut"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 6: SECTION 6 FINANCIAL MANAGEMENT */}
+            {dashboardSection === 'sec6' && (
+              <div className="space-y-6">
+                <div className="bg-white p-4 rounded-xl border border-slate-200">
+                  <h3 className="text-sm font-bold text-slate-900">Section 6: Financial Management</h3>
+                  <p className="text-xs text-slate-500">Evaluating money challenges, learning channels, and demand for structured personal finance training</p>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <QuestionCard
+                    qNumber="Question 12"
+                    title="Most Challenging Aspects of Managing Money"
+                    subtitle="Select up to 3"
+                    data={kpis.section6_finance.q12_finance_challenges}
+                    chartType="bar"
+                    barColor="#F59E0B"
+                  />
+                  <QuestionCard
+                    qNumber="Question 13"
+                    title="Where Students Learned Money Management"
+                    subtitle="Select up to 2"
+                    data={kpis.section6_finance.q13_finance_source}
+                    chartType="bar"
+                    barColor="#6366F1"
+                  />
+                  <QuestionCard
+                    qNumber="Question 14"
+                    title="Perceived Utility of Structured Financial Guidance"
+                    subtitle="Single Choice"
+                    data={kpis.section6_finance.q14_finance_utility}
+                    chartType="donut"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 7: SECTION 7 SOCIAL RELATIONSHIPS & STUDENT LIFE */}
+            {dashboardSection === 'sec7' && (
+              <div className="space-y-6">
+                <div className="bg-white p-4 rounded-xl border border-slate-200">
+                  <h3 className="text-sm font-bold text-slate-900">Section 7: Relationships, Social Life & Student Engagement</h3>
+                  <p className="text-xs text-slate-500">Extracurricular involvement, institutional guidance on leadership/balance, and relationship guidance needs</p>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <QuestionCard
+                    qNumber="Question 15"
+                    title="Social & Student Life Areas Currently Managed"
+                    subtitle="Select all that apply"
+                    data={kpis.section7_social.q15_social_involvement}
+                    chartType="bar"
+                    barColor="#06B6D4"
+                  />
+                  <QuestionCard
+                    qNumber="Question 16"
+                    title="University Guidance on Student Activities & Balance"
+                    subtitle="Single Choice"
+                    data={kpis.section7_social.q16_social_guidance_received}
+                    chartType="donut"
+                  />
+                  <QuestionCard
+                    qNumber="Question 17"
+                    title="Social & Relationship Areas Needing Guidance"
+                    subtitle="Select up to 3"
+                    data={kpis.section7_social.q17_social_guidance_desired}
+                    chartType="bar"
+                    barColor="#10B981"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 8: SECTION 8 CAREER & FUTURE PREPARATION */}
+            {dashboardSection === 'sec8' && (
+              <div className="space-y-6">
+                <div className="bg-white p-4 rounded-xl border border-slate-200">
+                  <h3 className="text-sm font-bold text-slate-900">Section 8: Preparation for the Future & Life After University</h3>
+                  <p className="text-xs text-slate-500">Post-graduation preparedness feelings, guidance desires, institutional career support, and career guidance sources</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <QuestionCard
+                    qNumber="Question 18"
+                    title="Preparedness for Life After University"
+                    subtitle="Single Choice"
+                    data={kpis.section8_career.q18_postgrad_preparedness}
+                    chartType="donut"
+                  />
+                  <QuestionCard
+                    qNumber="Question 19"
+                    title="Most Useful Career & Future Guidance Areas"
+                    subtitle="Select up to 4"
+                    data={kpis.section8_career.q19_career_guidance_desired}
+                    chartType="bar"
+                    barColor="#6366F1"
+                  />
+                  <QuestionCard
+                    qNumber="Question 20"
+                    title="University Support for Career Preparation"
+                    subtitle="Single Choice"
+                    data={kpis.section8_career.q20_career_guidance_received}
+                    chartType="donut"
+                  />
+                  <QuestionCard
+                    qNumber="Question 21"
+                    title="Where Students Get Career Guidance"
+                    subtitle="Select up to 3"
+                    data={kpis.section8_career.q21_career_source}
+                    chartType="bar"
+                    barColor="#F59E0B"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 9: SECTION 9 FOUNDATION COURSE DEMAND (CENTRAL THESIS) */}
+            {dashboardSection === 'sec9' && (
+              <div className="space-y-6">
+                <div className="bg-white p-4 rounded-xl border border-slate-200">
+                  <h3 className="text-sm font-bold text-slate-900">Section 9: Perceived Gaps & Foundation Course Need (Central Thesis)</h3>
+                  <p className="text-xs text-slate-500">Institutional adequacy evaluation, priority guidance areas, course utility endorsement, and preferred delivery format</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <QuestionCard
+                    qNumber="Question 22"
+                    title="Overall Adequacy of University Life Preparation"
+                    subtitle="Single Choice"
+                    data={kpis.section9_gaps_course.q22_overall_adequacy}
+                    chartType="donut"
+                  />
+                  <QuestionCard
+                    qNumber="Question 23"
+                    title="Priority Areas Needing Structured Guidance"
+                    subtitle="Select up to 5"
+                    data={kpis.section9_gaps_course.q23_areas_needing_guidance}
+                    chartType="bar"
+                    barColor="#EF4444"
+                  />
+                  <QuestionCard
+                    qNumber="Question 24"
+                    title="Foundation Course Utility (The Central Question)"
+                    subtitle="Central Research Hypothesis"
+                    data={kpis.section9_gaps_course.q24_course_utility}
+                    chartType="donut"
+                  />
+                  <QuestionCard
+                    qNumber="Question 25"
+                    title="Preferred Learning Format for Course"
+                    subtitle="Select up to 2"
+                    data={kpis.section9_gaps_course.q25_preferred_format}
+                    chartType="bar"
+                    barColor="#10B981"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* TAB: IN-APP SURVEY FORM */}
+        {/* TAB 2: IN-APP SURVEY FORM */}
         {!isLoading && activeTab === 'survey' && (
           <div className="py-2">
             <SurveyForm
@@ -648,7 +1113,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* TAB 2: QUALITATIVE VOICE */}
+        {/* TAB 3: QUALITATIVE VOICE */}
         {!isLoading && activeTab === 'qualitative' && (
           <div className="space-y-4">
             <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -669,46 +1134,52 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {qualRecords.map((r, idx) => (
-                <div key={idx} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md">
-                        {r.Level_of_Study} • {r.Programme}
-                      </span>
-                      <span className="text-[10px] text-slate-400">{r.Institution_Type}</span>
+            {qualRecords.length === 0 ? (
+              <div className="p-8 text-center bg-white rounded-xl border border-slate-200 text-slate-500 text-xs">
+                No qualitative responses match your search. Submit a survey or connect your Google Sheet to view verbatim responses.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {qualRecords.map((r, idx) => (
+                  <div key={idx} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md">
+                          {r.Level_of_Study} • {r.Programme}
+                        </span>
+                        <span className="text-[10px] text-slate-400">{r.Institution_Type}</span>
+                      </div>
+
+                      {r.q26_wish_taught && (
+                        <div className="mb-3">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                            Wish Someone Had Taught Me (Q26):
+                          </span>
+                          <blockquote className="text-xs text-slate-800 italic bg-slate-50 p-2.5 rounded-lg border-l-2 border-blue-500">
+                            "{r.q26_wish_taught}"
+                          </blockquote>
+                        </div>
+                      )}
+
+                      {r.q27_general_recommendations && (
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                            Recommendation for Universities (Q27):
+                          </span>
+                          <blockquote className="text-xs text-slate-800 italic bg-slate-50 p-2.5 rounded-lg border-l-2 border-emerald-500">
+                            "{r.q27_general_recommendations}"
+                          </blockquote>
+                        </div>
+                      )}
                     </div>
-
-                    {r.q26_wish_taught && (
-                      <div className="mb-3">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                          Wish Someone Had Taught Me (Q26):
-                        </span>
-                        <blockquote className="text-xs text-slate-800 italic bg-slate-50 p-2.5 rounded-lg border-l-2 border-blue-500">
-                          "{r.q26_wish_taught}"
-                        </blockquote>
-                      </div>
-                    )}
-
-                    {r.q27_general_recommendations && (
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                          Recommendation for Universities (Q27):
-                        </span>
-                        <blockquote className="text-xs text-slate-800 italic bg-slate-50 p-2.5 rounded-lg border-l-2 border-emerald-500">
-                          "{r.q27_general_recommendations}"
-                        </blockquote>
-                      </div>
-                    )}
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {/* TAB 3: CLEANED DATASET */}
+        {/* TAB 4: CLEANED DATASET */}
         {!isLoading && activeTab === 'dataset' && (
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
