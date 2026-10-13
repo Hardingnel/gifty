@@ -40,6 +40,7 @@ import {
   convertGoogleSheetsUrl
 } from '../lib/survey-parser';
 import { exportCleanExcel } from '../lib/excel-export';
+import SurveyForm from '../components/SurveyForm';
 
 const COLORS_PIE = ['#10B981', '#2563EB', '#EF4444', '#F59E0B'];
 
@@ -50,7 +51,8 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [showUrlModal, setShowUrlModal] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'qualitative' | 'dataset'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'survey' | 'qualitative' | 'dataset'>('dashboard');
+  const [submittedRecords, setSubmittedRecords] = useState<SurveyRecord[]>([]);
 
   // Filters
   const [filterLevel, setFilterLevel] = useState<string>('All');
@@ -120,31 +122,36 @@ export default function DashboardPage() {
     return parseSurveyCSV(csvData);
   }, [csvData]);
 
+  // Combined Clean Records (Fetched CSV + Live Submitted on Web)
+  const allClean = useMemo(() => {
+    return [...submittedRecords, ...clean];
+  }, [submittedRecords, clean]);
+
   // Available Filter Options
   const studyLevels = useMemo(() => {
-    const set = new Set(clean.map(r => r.Level_of_Study).filter(Boolean));
+    const set = new Set(allClean.map(r => r.Level_of_Study).filter(Boolean));
     return ['All', ...Array.from(set)];
-  }, [clean]);
+  }, [allClean]);
 
   const instTypes = useMemo(() => {
-    const set = new Set(clean.map(r => r.Institution_Type).filter(Boolean));
+    const set = new Set(allClean.map(r => r.Institution_Type).filter(Boolean));
     return ['All', ...Array.from(set)];
-  }, [clean]);
+  }, [allClean]);
 
   const genders = useMemo(() => {
-    const set = new Set(clean.map(r => r.Gender).filter(Boolean));
+    const set = new Set(allClean.map(r => r.Gender).filter(Boolean));
     return ['All', ...Array.from(set)];
-  }, [clean]);
+  }, [allClean]);
 
   // Filtered Records
   const filteredRecords = useMemo(() => {
-    return clean.filter(r => {
+    return allClean.filter(r => {
       const matchLevel = filterLevel === 'All' || r.Level_of_Study === filterLevel;
       const matchInst = filterInst === 'All' || r.Institution_Type === filterInst;
       const matchGender = filterGender === 'All' || r.Gender === filterGender;
       return matchLevel && matchInst && matchGender;
     });
-  }, [clean, filterLevel, filterInst, filterGender]);
+  }, [allClean, filterLevel, filterInst, filterGender]);
 
   // Recomputed KPIs
   const kpis: ResearchKPIs | null = useMemo(() => {
@@ -296,6 +303,12 @@ export default function DashboardPage() {
               className={`px-3.5 py-1.5 rounded-md transition ${activeTab === 'dashboard' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
             >
               📊 Research KPIs & Visualizations
+            </button>
+            <button
+              onClick={() => setActiveTab('survey')}
+              className={`px-3.5 py-1.5 rounded-md transition ${activeTab === 'survey' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              📝 Take Survey
             </button>
             <button
               onClick={() => setActiveTab('qualitative')}
@@ -593,6 +606,18 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* TAB: IN-APP SURVEY FORM */}
+        {!isLoading && activeTab === 'survey' && (
+          <div className="py-2">
+            <SurveyForm
+              onSurveySubmitted={(newRec) => {
+                setSubmittedRecords(prev => [newRec, ...prev]);
+                setActiveTab('dashboard');
+              }}
+            />
           </div>
         )}
 
