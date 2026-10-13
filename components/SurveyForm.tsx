@@ -102,10 +102,13 @@ export default function SurveyForm({ onSurveySubmitted }: SurveyFormProps) {
     };
 
     try {
+      const webhookUrl = typeof window !== 'undefined' ? localStorage.getItem('google_sheet_webhook_url') : '';
+      const payload = webhookUrl ? { ...newRecord, _sheetWebhookUrl: webhookUrl } : newRecord;
+
       await fetch('/api/submit-survey', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newRecord)
+        body: JSON.stringify(payload)
       });
     } catch (err) {
       console.warn('API submission failed:', err);

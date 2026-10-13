@@ -44,7 +44,21 @@ export async function saveSurveySubmission(record: SurveyRecord): Promise<void> 
     }
   }
 
-  // Option C: Local JSON File Storage
+  // Option C: Google Sheet Webhook Sync (Auto-append to Google Sheet)
+  const googleSheetWebhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL || (record as any)._sheetWebhookUrl;
+  if (googleSheetWebhookUrl && typeof googleSheetWebhookUrl === 'string' && googleSheetWebhookUrl.startsWith('http')) {
+    try {
+      await fetch(googleSheetWebhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(record)
+      });
+    } catch (err) {
+      console.warn('Google Sheet webhook sync failed:', err);
+    }
+  }
+
+  // Option D: Local JSON File Storage
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });

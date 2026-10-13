@@ -28,7 +28,9 @@ import {
   Upload,
   Trash2,
   Database,
-  ShieldCheck
+  ShieldCheck,
+  Copy,
+  Check
 } from 'lucide-react';
 import {
   PieChart,
@@ -55,6 +57,47 @@ import SurveyForm from '../components/SurveyForm';
 
 const PALETTE = ['#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
 const PIE_COLORS = ['#10B981', '#2563EB', '#F59E0B', '#EF4444', '#8B5CF6', '#64748B'];
+
+const GOOGLE_APPS_SCRIPT_CODE = `function doPost(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var data = JSON.parse(e.postData.contents);
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow([
+        "Timestamp", "Response ID", "Name", "Gender", "Level of Study", "Institution Type",
+        "Programme", "Age Group", "Q1. Areas Managed", "Q2. Preparedness", "Q3. Skills Source",
+        "Q4. Time System", "Q5. Difficult Balance", "Q6. Time Guidance", "Q7. Important Skills",
+        "Q8. Guidance Received", "Q9. Desired Guidance", "Q10. Stress Coping", "Q11. Wellbeing Guidance",
+        "Q12. Finance Challenges", "Q13. Finance Source", "Q14. Finance Utility", "Q15. Social Life",
+        "Q16. Social Guidance", "Q17. Social Desired", "Q18. Postgrad Preparedness", "Q19. Career Desired",
+        "Q20. Career Guidance", "Q21. Career Source", "Q22. Overall Adequacy", "Q23. Priority Areas",
+        "Q24. Foundation Course Utility", "Q25. Preferred Format", "Q26. Wish Taught", "Q27. Recommendations"
+      ]);
+      var headerRange = sheet.getRange(1, 1, 1, 35);
+      headerRange.setFontWeight("bold").setBackground("#1E293B").setFontColor("#FFFFFF");
+      sheet.setFrozenRows(1);
+    }
+    sheet.appendRow([
+      data.Timestamp || new Date().toISOString(), data.Response_ID || "", data.Name || "Anonymous",
+      data.Gender || "", data.Level_of_Study || "", data.Institution_Type || "", data.Programme || "",
+      data.Age_Group || "", data.q1_areas_managed || "", data.q2_preparedness || "", data.q3_skills_source || "",
+      data.q4_time_system || "", data.q5_difficult_balance || "", data.q6_time_guidance || "",
+      data.q7_personal_dev_important || "", data.q8_personal_dev_received || "", data.q9_personal_dev_desired || "",
+      data.q10_stress_coping || "", data.q11_wellbeing_received || "", data.q12_finance_challenges || "",
+      data.q13_finance_source || "", data.q14_finance_utility || "", data.q15_social_involvement || "",
+      data.q16_social_guidance_received || "", data.q17_social_guidance_desired || "", data.q18_postgrad_preparedness || "",
+      data.q19_career_guidance_desired || "", data.q20_career_guidance_received || "", data.q21_career_source || "",
+      data.q22_overall_adequacy || "", data.q23_areas_needing_guidance || "", data.q24_course_utility || "",
+      data.q25_preferred_format || "", data.q26_wish_taught || "", data.q27_general_recommendations || ""
+    ]);
+    return ContentService.createTextOutput(JSON.stringify({ status: "success" })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", error: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({ status: "ok" })).setMimeType(ContentService.MimeType.JSON);
+}`;
 
 interface QuestionCardProps {
   qNumber: string;
@@ -177,8 +220,26 @@ export default function DashboardPage() {
   const [filterGender, setFilterGender] = useState<string>('All');
   const [searchQuote, setSearchQuote] = useState<string>('');
 
+  // Google Sheet Webhook Sync State
+  const [webhookUrl, setWebhookUrl] = useState<string>('');
+  const [sheetModalTab, setSheetModalTab] = useState<'autosave' | 'read'>('autosave');
+  const [isTestingWebhook, setIsTestingWebhook] = useState<boolean>(false);
+  const [testWebhookResult, setTestWebhookResult] = useState<{
+    success?: boolean;
+    isAuthBlocked?: boolean;
+    message?: string;
+    error?: string;
+  } | null>(null);
+  const [copiedScript, setCopiedScript] = useState<boolean>(false);
+
   // Persistence: Load from localStorage and server API
   useEffect(() => {
+    // 0. Load saved Google Sheet webhook URL
+    const savedWebhook = localStorage.getItem('google_sheet_webhook_url');
+    if (savedWebhook) {
+      setWebhookUrl(savedWebhook);
+    }
+
     // 1. Immediately hydrate from localStorage for zero delay on refresh
     try {
       const localSaved = localStorage.getItem('survey_submitted_records');
@@ -308,6 +369,47 @@ export default function DashboardPage() {
     localStorage.removeItem('survey_submitted_records');
     setSubmittedRecords([]);
     alert('All survey responses have been reset.');
+  };
+
+  const handleCopyScript = () => {
+    navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_CODE);
+    setCopiedScript(true);
+    setTimeout(() => setCopiedScript(false), 3000);
+  };
+
+  const handleTestWebhook = async () => {
+    if (!webhookUrl.trim()) {
+      setTestWebhookResult({ success: false, error: 'Please enter a Google Apps Script Web App URL first.' });
+      return;
+    }
+    setIsTestingWebhook(true);
+    setTestWebhookResult(null);
+    try {
+      const res = await fetch('/api/test-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: webhookUrl.trim() })
+      });
+      const data = await res.json();
+      setTestWebhookResult(data);
+      if (data.success) {
+        localStorage.setItem('google_sheet_webhook_url', webhookUrl.trim());
+      }
+    } catch (err: any) {
+      setTestWebhookResult({ success: false, error: err.message || 'Failed to reach webhook endpoint.' });
+    } finally {
+      setIsTestingWebhook(false);
+    }
+  };
+
+  const handleSaveWebhook = () => {
+    if (!webhookUrl.trim()) {
+      alert('Please enter a Google Apps Script Web App URL.');
+      return;
+    }
+    localStorage.setItem('google_sheet_webhook_url', webhookUrl.trim());
+    setShowUrlModal(false);
+    alert('Google Sheet Webhook saved! All survey responses will now automatically save into your Google Sheet.');
   };
 
   const fetchSampleData = async () => {
@@ -517,49 +619,161 @@ export default function DashboardPage() {
       {/* CONNECT GOOGLE SHEET MODAL */}
       {showUrlModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
-            <h3 className="text-lg font-bold text-slate-900 mb-1 flex items-center gap-2">
-              <LinkIcon className="h-5 w-5 text-blue-600" />
-              Connect Live Google Form Responses
-            </h3>
-            <p className="text-xs text-slate-600 mb-3 leading-relaxed">
-              Connect your survey responses to update the dashboard in real-time.
-            </p>
-
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 mb-4 text-[11px] text-slate-700 space-y-2">
-              <div>
-                <strong className="text-emerald-700 font-semibold block">Option 1: Google Sheet Link (Recommended)</strong>
-                <span>1. In your Google Form, click <strong>Responses</strong> &gt; <strong>Link to Sheets</strong>.<br />
-                2. In the Google Sheet, click <strong>Share</strong> (top right) &gt; set to <strong>"Anyone with the link can view"</strong> &gt; <strong>Copy link</strong>.</span>
-              </div>
-              <div className="pt-2 border-t border-slate-200">
-                <strong className="text-blue-700 font-semibold block">Option 2: Direct Google Form Submissions</strong>
-                <span>You can also share the web survey directly with respondents by clicking <strong>"Take Survey"</strong>.</span>
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <LinkIcon className="h-5 w-5 text-blue-600" />
+                Google Sheet Integration
+              </h3>
+              <div className="flex bg-slate-100 p-0.5 rounded-lg text-[11px] font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setSheetModalTab('autosave')}
+                  className={`px-3 py-1 rounded-md transition ${sheetModalTab === 'autosave' ? 'bg-white text-slate-900 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  Auto-Save to Sheet
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSheetModalTab('read')}
+                  className={`px-3 py-1 rounded-md transition ${sheetModalTab === 'read' ? 'bg-white text-slate-900 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  Read Public Sheet
+                </button>
               </div>
             </div>
 
-            <input
-              type="text"
-              placeholder="Paste Google Sheet URL (https://docs.google.com/spreadsheets/d/...)"
-              value={inputUrl}
-              onChange={e => setInputUrl(e.target.value)}
-              className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-            />
+            {sheetModalTab === 'autosave' && (
+              <div className="space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-900">
+                  <strong className="block font-bold mb-1">Direct Google Sheet Auto-Save (Zero Data Loss)</strong>
+                  Whenever respondents submit the survey on this web app, each response is automatically appended as a new row in your Google Sheet.
+                </div>
 
-            <div className="flex justify-end gap-2.5">
-              <button
-                onClick={() => setShowUrlModal(false)}
-                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => fetchFromUrl(inputUrl)}
-                className="px-4 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow-sm transition"
-              >
-                Connect & Load Responses
-              </button>
-            </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2 text-[11px] text-slate-700">
+                  <div className="font-bold text-slate-900 flex items-center justify-between">
+                    <span>Quick 3-Step Setup in Google Sheets:</span>
+                    <button
+                      type="button"
+                      onClick={handleCopyScript}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-[10px] font-bold shadow-sm transition"
+                    >
+                      {copiedScript ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      {copiedScript ? 'Copied to Clipboard!' : 'Copy Apps Script Code'}
+                    </button>
+                  </div>
+                  <ol className="list-decimal pl-4 space-y-1 text-slate-600">
+                    <li>Open your Google Sheet &gt; Click <strong>Extensions &gt; Apps Script</strong>.</li>
+                    <li>Paste the copied script and click <strong>Save</strong>.</li>
+                    <li>
+                      Click <strong>Deploy &gt; New deployment</strong> &gt; Type: <strong>Web app</strong>.<br />
+                      Set <strong>Execute as:</strong> <code className="bg-slate-200 px-1 py-0.5 rounded text-[10px]">Me</code> and <strong>Who has access:</strong> <code className="bg-amber-100 text-amber-900 font-bold px-1 py-0.5 rounded text-[10px]">Anyone</code>.
+                    </li>
+                    <li>Copy the resulting Web App URL (<code className="bg-slate-200 px-1 rounded text-[10px]">.../exec</code>) and paste it below.</li>
+                  </ol>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Google Apps Script Web App URL
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="https://script.google.com/macros/s/.../exec"
+                      value={webhookUrl}
+                      onChange={e => setWebhookUrl(e.target.value)}
+                      className="flex-1 text-xs px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleTestWebhook}
+                      disabled={isTestingWebhook || !webhookUrl.trim()}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold transition disabled:opacity-50"
+                    >
+                      {isTestingWebhook ? 'Testing...' : 'Test Connection'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Test Feedback Banner */}
+                {testWebhookResult && (
+                  <div className={`p-3 rounded-xl text-xs flex items-start gap-2 ${testWebhookResult.success ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-rose-50 border border-rose-200 text-rose-800'}`}>
+                    {testWebhookResult.success ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                    )}
+                    <div className="text-[11px] leading-relaxed">
+                      {testWebhookResult.message || testWebhookResult.error}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowUrlModal(false)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveWebhook}
+                    className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-sm transition"
+                  >
+                    Save & Enable Google Sheet Auto-Save
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {sheetModalTab === 'read' && (
+              <div className="space-y-4">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs text-slate-700">
+                  <strong className="block font-bold mb-1 text-slate-900">Read & Visualize Existing Google Sheet Responses</strong>
+                  <p className="text-[11px] text-slate-600 leading-relaxed mb-2">
+                    If you have a Google Form linked to a Google Sheet and want to load past responses into this dashboard:
+                  </p>
+                  <ol className="list-decimal pl-4 space-y-1 text-[11px] text-slate-600">
+                    <li>In your Google Sheet, click <strong>Share</strong> (top right).</li>
+                    <li>Set General access to <strong>"Anyone with the link can view"</strong>.</li>
+                    <li>Click <strong>Copy link</strong> and paste it below.</li>
+                  </ol>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Public Google Sheet Link
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="https://docs.google.com/spreadsheets/d/.../edit?usp=sharing"
+                    value={inputUrl}
+                    onChange={e => setInputUrl(e.target.value)}
+                    className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowUrlModal(false)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fetchFromUrl(inputUrl)}
+                    className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow-sm transition"
+                  >
+                    Load Sheet into Dashboard
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
