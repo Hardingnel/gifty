@@ -30,7 +30,8 @@ import {
   Database,
   ShieldCheck,
   Copy,
-  Check
+  Check,
+  ExternalLink
 } from 'lucide-react';
 import {
   PieChart,
@@ -57,6 +58,12 @@ import SurveyForm from '../components/SurveyForm';
 
 const PALETTE = ['#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
 const PIE_COLORS = ['#10B981', '#2563EB', '#F59E0B', '#EF4444', '#8B5CF6', '#64748B'];
+
+const DEFAULT_SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRTXU_1sH5hlUKWJ7oUsINGh-9BxG0dxXnXJUb4gnEO5Efli2lktGDQ8DsPmdNdhEG88F__DJSa3K59/pub?output=csv';
+const GOOGLE_SHEET_EMBED_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRTXU_1sH5hlUKWJ7oUsINGh-9BxG0dxXnXJUb4gnEO5Efli2lktGDQ8DsPmdNdhEG88F__DJSa3K59/pubhtml?widget=true&headers=false';
+const GOOGLE_SHEET_VIEW_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRTXU_1sH5hlUKWJ7oUsINGh-9BxG0dxXnXJUb4gnEO5Efli2lktGDQ8DsPmdNdhEG88F__DJSa3K59/pubhtml';
+const GOOGLE_FORM_URL = 'https://forms.gle/5WRtVeL1qrqxggVk9';
+const GOOGLE_FORM_EMBED_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSeIqti7Gl_irlWzBJsKx3q3x-9_4orP4h1b36nOV3zwexybQw/viewform?embedded=true';
 
 const GOOGLE_APPS_SCRIPT_CODE = `function doPost(e) {
   try {
@@ -208,7 +215,8 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [showUrlModal, setShowUrlModal] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'survey' | 'qualitative' | 'dataset'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'sheet' | 'survey' | 'qualitative' | 'dataset'>('dashboard');
+  const [surveyMode, setSurveyMode] = useState<'google' | 'native'>('google');
   const [dashboardSection, setDashboardSection] = useState<
     'overview' | 'sec1' | 'sec2' | 'sec3' | 'sec4' | 'sec5' | 'sec6' | 'sec7' | 'sec8' | 'sec9'
   >('overview');
@@ -256,15 +264,11 @@ export default function DashboardPage() {
     // 2. Fetch server-persisted submissions
     fetchServerResponses();
 
-    // 3. Sync from Google Sheet if connected, otherwise load baseline CSV
-    const savedUrl = localStorage.getItem('survey_sheet_url');
-    if (savedUrl) {
-      setSheetUrl(savedUrl);
-      setInputUrl(savedUrl);
-      fetchFromUrl(savedUrl);
-    } else {
-      fetchSampleData();
-    }
+    // 3. Sync from Google Sheet: default to the official live Google Sheet CSV URL
+    const savedUrl = localStorage.getItem('survey_sheet_url') || DEFAULT_SHEET_CSV_URL;
+    setSheetUrl(savedUrl);
+    setInputUrl(savedUrl);
+    fetchFromUrl(savedUrl);
   }, []);
 
   const fetchServerResponses = async () => {
@@ -585,22 +589,22 @@ export default function DashboardPage() {
             <button
               onClick={() => setShowUrlModal(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition"
-              title="Connect to live Google Sheet (Optional)"
+              title="Google Sheet & Form Integration Settings"
             >
-              <LinkIcon className="h-3.5 w-3.5 text-blue-400" />
-              {sheetUrl ? 'Sheet Connected' : 'Google Sheet (Opt)'}
+              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-400" />
+              Sheet Settings
             </button>
 
             <button
               onClick={() => {
                 fetchServerResponses();
-                if (sheetUrl) fetchFromUrl(sheetUrl);
+                fetchFromUrl(sheetUrl || DEFAULT_SHEET_CSV_URL);
               }}
               disabled={isLoading}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition"
-              title="Refresh and sync data"
+              title="Refresh and sync data from Google Sheet"
             >
-              <RefreshCw className={`h-3.5 w-3.5 text-slate-400 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-3.5 w-3.5 text-blue-400 ${isLoading ? 'animate-spin' : ''}`} />
               Sync
             </button>
 
@@ -732,28 +736,56 @@ export default function DashboardPage() {
             {sheetModalTab === 'read' && (
               <div className="space-y-4">
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs text-slate-700">
-                  <strong className="block font-bold mb-1 text-slate-900">Read & Visualize Existing Google Sheet Responses</strong>
+                  <strong className="block font-bold mb-1 text-slate-900">Live Google Sheet Sync & Visualization</strong>
                   <p className="text-[11px] text-slate-600 leading-relaxed mb-2">
-                    If you have a Google Form linked to a Google Sheet and want to load past responses into this dashboard:
+                    Enter any Google Sheet link, published web URL, or iframe embed code. The dashboard automatically extracts the responses and visualizes them across all 9 research sections.
                   </p>
-                  <ol className="list-decimal pl-4 space-y-1 text-[11px] text-slate-600">
-                    <li>In your Google Sheet, click <strong>Share</strong> (top right).</li>
-                    <li>Set General access to <strong>"Anyone with the link can view"</strong>.</li>
-                    <li>Click <strong>Copy link</strong> and paste it below.</li>
-                  </ol>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInputUrl(DEFAULT_SHEET_CSV_URL);
+                        fetchFromUrl(DEFAULT_SHEET_CSV_URL);
+                      }}
+                      className="px-2.5 py-1 text-[11px] font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-md border border-blue-200 transition"
+                    >
+                      Use Official Survey Sheet
+                    </button>
+                    <a
+                      href={GOOGLE_SHEET_VIEW_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-md border border-emerald-200 transition"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      View Sheet in Browser
+                    </a>
+                    <a
+                      href={GOOGLE_FORM_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-md border border-slate-200 transition"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Open Google Form
+                    </a>
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Public Google Sheet Link
+                    Google Sheet URL / Published Link / Iframe Code
                   </label>
                   <input
                     type="text"
-                    placeholder="https://docs.google.com/spreadsheets/d/.../edit?usp=sharing"
+                    placeholder="Paste Google Sheet URL, pubhtml link, or <iframe src='...'></iframe>"
                     value={inputUrl}
                     onChange={e => setInputUrl(e.target.value)}
-                    className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                   />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Supports published links (<code>/pubhtml</code>, <code>/pub?output=csv</code>), sharing links (<code>/edit</code>), and iframe tags.
+                  </p>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
@@ -795,6 +827,12 @@ export default function DashboardPage() {
               className={`px-3.5 py-1.5 rounded-md transition ${activeTab === 'dashboard' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
             >
               📊 Research KPIs & Visualizations
+            </button>
+            <button
+              onClick={() => setActiveTab('sheet')}
+              className={`px-3.5 py-1.5 rounded-md transition ${activeTab === 'sheet' ? 'bg-white text-slate-900 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              📑 Live Google Sheet
             </button>
             <button
               onClick={() => setActiveTab('survey')}
@@ -870,7 +908,7 @@ export default function DashboardPage() {
         )}
 
         {/* EMPTY STATE */}
-        {!isLoading && allClean.length === 0 && activeTab !== 'survey' && (
+        {!isLoading && allClean.length === 0 && activeTab !== 'survey' && activeTab !== 'sheet' && (
           <div className="py-16 px-6 text-center bg-white rounded-2xl border border-slate-200 shadow-sm max-w-2xl mx-auto my-8">
             <div className="h-16 w-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100">
               <GraduationCap className="h-8 w-8" />
@@ -887,17 +925,17 @@ export default function DashboardPage() {
                 📝 Take Survey (Submit First Response)
               </button>
               <button
-                onClick={() => setShowUrlModal(true)}
+                onClick={() => setActiveTab('sheet')}
                 className="w-full sm:w-auto px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2"
               >
-                <LinkIcon className="h-3.5 w-3.5 text-blue-600" /> Connect Live Google Sheet
+                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> View Live Google Sheet
               </button>
             </div>
           </div>
         )}
 
         {/* NO FILTER MATCH */}
-        {!isLoading && allClean.length > 0 && filteredRecords.length === 0 && activeTab !== 'survey' && (
+        {!isLoading && allClean.length > 0 && filteredRecords.length === 0 && activeTab !== 'survey' && activeTab !== 'sheet' && (
           <div className="py-12 text-center bg-white rounded-xl border border-slate-200 my-6">
             <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto mb-2" />
             <h3 className="text-sm font-bold text-slate-800">No Responses Match Filters</h3>
@@ -1489,12 +1527,161 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* TAB 2: IN-APP SURVEY FORM */}
+        {/* TAB: LIVE GOOGLE SHEET */}
+        {!isLoading && activeTab === 'sheet' && (
+          <div className="space-y-4">
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Live Google Sheet Connected
+                  </span>
+                  <span className="text-xs text-slate-500 font-medium">
+                    Total Records: <strong>{allClean.length}</strong>
+                  </span>
+                </div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Google Sheet Responses & Live Spreadsheet View
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Real-time spreadsheet connected directly to your official Google Form. Any submissions or edits appear here automatically.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => fetchFromUrl(sheetUrl || DEFAULT_SHEET_CSV_URL)}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition"
+                  title="Re-fetch latest responses from Google Sheets"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 text-slate-600 ${isLoading ? 'animate-spin' : ''}`} />
+                  Sync Latest Responses
+                </button>
+
+                <a
+                  href={GOOGLE_SHEET_VIEW_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition"
+                  title="Open live Google Sheet in full page"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open Live Sheet (Full Page)
+                </a>
+
+                <a
+                  href={GOOGLE_FORM_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-sm transition"
+                  title="Open Google Form in New Tab"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open Google Form
+                </a>
+
+                <button
+                  onClick={handleExportExcel}
+                  disabled={!kpis}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Export Excel (.xlsx)
+                </button>
+              </div>
+            </div>
+
+            {/* Editing & Workflow Tip */}
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-900 flex items-start gap-3">
+              <div className="p-1 rounded-lg bg-blue-100 text-blue-700 mt-0.5">
+                <ShieldCheck className="h-4 w-4" />
+              </div>
+              <div className="flex-1">
+                <strong className="font-bold text-blue-950 block mb-0.5">
+                  How Viewing & Editing Works:
+                </strong>
+                <p className="text-[11px] text-blue-800 leading-relaxed">
+                  The spreadsheet below shows the live data directly published from your Google Sheet. When new respondents submit the Google Form or when you edit responses directly in your Google Sheet (e.g., correcting typos or cleaning answers), click <strong>"Sync Latest Responses"</strong> to update all 27 KPI charts, distributions, and demographic cross-tabs instantly.
+                </p>
+              </div>
+            </div>
+
+            {/* Embedded Iframe */}
+            <div className="bg-white rounded-xl border border-slate-200 p-2 shadow-sm">
+              <iframe
+                src={GOOGLE_SHEET_EMBED_URL}
+                className="w-full h-[720px] rounded-lg border-0 bg-white"
+                title="Live Google Sheet"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: IN-APP & GOOGLE FORM SURVEY */}
         {!isLoading && activeTab === 'survey' && (
-          <div className="py-2">
-            <SurveyForm
-              onSurveySubmitted={handleSurveySubmitted}
-            />
+          <div className="space-y-4">
+            {/* Mode Switcher */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setSurveyMode('google')}
+                  className={`px-3.5 py-1.5 rounded-md transition ${surveyMode === 'google' ? 'bg-white text-slate-900 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  📋 Official Google Form (Direct Sync to Google Sheet)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSurveyMode('native')}
+                  className={`px-3.5 py-1.5 rounded-md transition ${surveyMode === 'native' ? 'bg-white text-slate-900 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  ⚡ Interactive Web Survey (Step-by-Step UI)
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setActiveTab('sheet')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition"
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+                  View Sheet Responses
+                </button>
+                <a
+                  href={GOOGLE_FORM_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-sm transition"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open Form in New Tab
+                </a>
+              </div>
+            </div>
+
+            {surveyMode === 'google' ? (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
+                <div className="w-full flex justify-center">
+                  <iframe
+                    src={GOOGLE_FORM_EMBED_URL}
+                    width="100%"
+                    height="1200"
+                    frameBorder="0"
+                    marginHeight={0}
+                    marginWidth={0}
+                    className="rounded-xl border border-slate-200 shadow-inner bg-slate-50"
+                  >
+                    Loading Google Form…
+                  </iframe>
+                </div>
+              </div>
+            ) : (
+              <div className="py-2">
+                <SurveyForm onSurveySubmitted={handleSurveySubmitted} />
+              </div>
+            )}
           </div>
         )}
 

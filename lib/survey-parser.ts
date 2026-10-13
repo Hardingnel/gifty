@@ -114,12 +114,33 @@ export interface ResearchKPIs {
 
 export function convertGoogleSheetsUrl(url: string): string {
   if (!url) return '';
-  const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  if (!match) return url;
-  const sheetId = match[1];
-  const gidMatch = url.match(/[#&]gid=([0-9]+)/);
-  const gid = gidMatch ? gidMatch[1] : '0';
-  return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
+  const trimmed = url.trim();
+
+  // If user pasted an iframe embed code, extract the src URL
+  const iframeMatch = trimmed.match(/src=["']([^"']+)["']/i);
+  const target = iframeMatch ? iframeMatch[1] : trimmed;
+
+  // 1. Published Google Sheet (/spreadsheets/d/e/2PACX-...)
+  if (target.includes('/spreadsheets/d/e/')) {
+    const pubMatch = target.match(/\/spreadsheets\/d\/e\/([a-zA-Z0-9-_]+)/);
+    if (pubMatch) {
+      const pubId = pubMatch[1];
+      const gidMatch = target.match(/[#&?]gid=([0-9]+)/);
+      const gidParam = gidMatch ? `&gid=${gidMatch[1]}` : '';
+      return `https://docs.google.com/spreadsheets/d/e/${pubId}/pub?output=csv${gidParam}`;
+    }
+  }
+
+  // 2. Standard Google Sheet (/spreadsheets/d/<sheetId>/...)
+  const match = target.match(/\/spreadsheets\/d\/(?!e\/)([a-zA-Z0-9-_]+)/);
+  if (match) {
+    const sheetId = match[1];
+    const gidMatch = target.match(/[#&?]gid=([0-9]+)/);
+    const gid = gidMatch ? gidMatch[1] : '0';
+    return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
+  }
+
+  return target;
 }
 
 const PATTERNS: Record<string, RegExp[]> = {
