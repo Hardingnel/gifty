@@ -91,10 +91,18 @@ export default function DashboardPage() {
     setIsLoading(true);
     setErrorMsg('');
     try {
-      const exportUrl = convertGoogleSheetsUrl(url.trim());
-      const res = await fetch(exportUrl);
-      if (!res.ok) throw new Error('Could not download responses. Ensure the Google Sheet is shared with "Anyone with the link can view".');
+      const res = await fetch(`/api/fetch-sheet?url=${encodeURIComponent(url.trim())}`);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        if (errJson && errJson.isAuthError) {
+          throw new Error(`${errJson.error} ${errJson.details}`);
+        }
+        throw new Error(errJson?.error || `Failed to fetch responses (HTTP ${res.status}).`);
+      }
       const text = await res.text();
+      if (!text || text.trim().length === 0) {
+        throw new Error('Received an empty response from the provided Google link.');
+      }
       setCsvData(text);
       localStorage.setItem('survey_sheet_url', url.trim());
       setSheetUrl(url.trim());
@@ -225,16 +233,27 @@ export default function DashboardPage() {
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
             <h3 className="text-lg font-bold text-slate-900 mb-1 flex items-center gap-2">
               <LinkIcon className="h-5 w-5 text-blue-600" />
-              Connect Live Google Sheet
+              Connect Live Google Form Responses
             </h3>
-            <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-              Paste the shareable link of your Google Sheet (from your Google Form responses). Make sure it is set to
-              <strong className="text-slate-900"> "Anyone with the link can view"</strong>.
+            <p className="text-xs text-slate-600 mb-3 leading-relaxed">
+              Connect your survey responses to update the dashboard in real-time.
             </p>
+
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 mb-4 text-[11px] text-slate-700 space-y-2">
+              <div>
+                <strong className="text-emerald-700 font-semibold block">Option 1: Google Sheet Link (Recommended)</strong>
+                <span>1. In your Google Form, click <strong>Responses</strong> &gt; <strong>Link to Sheets</strong>.<br />
+                2. In the Google Sheet, click <strong>Share</strong> (top right) &gt; set to <strong>"Anyone with the link can view"</strong> &gt; <strong>Copy link</strong>.</span>
+              </div>
+              <div className="pt-2 border-t border-slate-200">
+                <strong className="text-blue-700 font-semibold block">Option 2: Google Apps Script Web App</strong>
+                <span>If using an Apps Script Web App URL (<code className="bg-slate-200 px-1 py-0.5 rounded text-[10px]">.../exec</code>), make sure in Apps Script Deploy settings that <strong>"Who has access"</strong> is set to <strong>"Anyone"</strong>.</span>
+              </div>
+            </div>
 
             <input
               type="text"
-              placeholder="https://docs.google.com/spreadsheets/d/.../edit?usp=sharing"
+              placeholder="Paste Google Sheet URL (https://docs.google.com/spreadsheets/d/...) or Apps Script URL"
               value={inputUrl}
               onChange={e => setInputUrl(e.target.value)}
               className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
