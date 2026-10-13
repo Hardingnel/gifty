@@ -377,12 +377,39 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* EMPTY STATE */}
-        {!isLoading && filteredRecords.length === 0 && (
-          <div className="py-16 text-center bg-white rounded-xl border border-slate-200">
-            <AlertTriangle className="h-10 w-10 text-amber-500 mx-auto mb-3" />
-            <h3 className="text-base font-bold text-slate-800">No Responses Found</h3>
-            <p className="text-xs text-slate-500 mt-1">Try resetting your filters or check your Google Sheet link.</p>
+        {/* EMPTY STATE: ZERO RESPONSES COLLECTED */}
+        {!isLoading && allClean.length === 0 && activeTab !== 'survey' && (
+          <div className="py-16 px-6 text-center bg-white rounded-2xl border border-slate-200 shadow-sm max-w-2xl mx-auto my-8">
+            <div className="h-16 w-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100">
+              <GraduationCap className="h-8 w-8" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 mb-1">Ready to Collect Survey Responses</h3>
+            <p className="text-xs text-slate-600 mb-6 max-w-md mx-auto leading-relaxed">
+              All mock data has been cleared. The system is clean and ready for real student responses. Connect your live Google Sheet or take the survey directly on the web to populate the dashboard.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <button
+                onClick={() => setActiveTab('survey')}
+                className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-sm transition flex items-center justify-center gap-2"
+              >
+                📝 Take Survey (Submit First Response)
+              </button>
+              <button
+                onClick={() => setShowUrlModal(true)}
+                className="w-full sm:w-auto px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2"
+              >
+                <LinkIcon className="h-3.5 w-3.5 text-blue-600" /> Connect Live Google Sheet
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* EMPTY STATE: FILTER MISMATCH */}
+        {!isLoading && allClean.length > 0 && filteredRecords.length === 0 && activeTab !== 'survey' && (
+          <div className="py-12 text-center bg-white rounded-xl border border-slate-200 my-6">
+            <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto mb-2" />
+            <h3 className="text-sm font-bold text-slate-800">No Responses Match Filters</h3>
+            <p className="text-xs text-slate-500 mt-1">Try setting Level of Study, Institution Type, or Gender back to "All".</p>
           </div>
         )}
 
