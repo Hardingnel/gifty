@@ -24,7 +24,11 @@ import {
   Award,
   Sparkles,
   BarChart3,
-  PieChart as PieIcon
+  PieChart as PieIcon,
+  Upload,
+  Trash2,
+  Database,
+  ShieldCheck
 } from 'lucide-react';
 import {
   PieChart,
@@ -173,7 +177,25 @@ export default function DashboardPage() {
   const [filterGender, setFilterGender] = useState<string>('All');
   const [searchQuote, setSearchQuote] = useState<string>('');
 
+  // Persistence: Load from localStorage and server API
   useEffect(() => {
+    // 1. Immediately hydrate from localStorage for zero delay on refresh
+    try {
+      const localSaved = localStorage.getItem('survey_submitted_records');
+      if (localSaved) {
+        const parsed = JSON.parse(localSaved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setSubmittedRecords(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn('Error reading local survey records:', e);
+    }
+
+    // 2. Fetch server-persisted submissions
+    fetchServerResponses();
+
+    // 3. Sync from Google Sheet if connected, otherwise load baseline CSV
     const savedUrl = localStorage.getItem('survey_sheet_url');
     if (savedUrl) {
       setSheetUrl(savedUrl);
@@ -183,6 +205,110 @@ export default function DashboardPage() {
       fetchSampleData();
     }
   }, []);
+
+  const fetchServerResponses = async () => {
+    try {
+      const res = await fetch('/api/responses');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data && Array.isArray(json.data) && json.data.length > 0) {
+          setSubmittedRecords(prev => {
+            const map = new Map<string, SurveyRecord>();
+            prev.forEach(r => map.set(r.Response_ID, r));
+            json.data.forEach((r: SurveyRecord) => map.set(r.Response_ID, r));
+            const merged = Array.from(map.values());
+            try {
+              localStorage.setItem('survey_submitted_records', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch server responses:', err);
+    }
+  };
+
+  const handleSurveySubmitted = (newRec: SurveyRecord) => {
+    setSubmittedRecords(prev => {
+      const updated = [newRec, ...prev.filter(r => r.Response_ID !== newRec.Response_ID)];
+      try {
+        localStorage.setItem('survey_submitted_records', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('Could not save to localStorage:', e);
+      }
+      return updated;
+    });
+    setActiveTab('dashboard');
+  };
+
+  const handleExportJSON = () => {
+    if (allClean.length === 0) {
+      alert('No survey responses available to export.');
+      return;
+    }
+    const blob = new Blob([JSON.stringify(allClean, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `survey_responses_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        let records: SurveyRecord[] = [];
+        if (file.name.endsWith('.json')) {
+          records = JSON.parse(text);
+        } else if (file.name.endsWith('.csv')) {
+          const parsed = parseSurveyCSV(text);
+          records = parsed.clean;
+        }
+        if (Array.isArray(records) && records.length > 0) {
+          await fetch('/api/responses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(records)
+          });
+          setSubmittedRecords(prev => {
+            const map = new Map<string, SurveyRecord>();
+            prev.forEach(r => map.set(r.Response_ID, r));
+            records.forEach(r => map.set(r.Response_ID, r));
+            const merged = Array.from(map.values());
+            try {
+              localStorage.setItem('survey_submitted_records', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
+          alert(`Successfully imported and restored ${records.length} responses!`);
+        } else {
+          alert('No valid survey records found in selected file.');
+        }
+      } catch (err: any) {
+        alert('Failed to import file: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleClearAllData = async () => {
+    if (!confirm('Are you sure you want to clear all stored survey responses? This action cannot be undone unless you have downloaded a backup.')) {
+      return;
+    }
+    try {
+      await fetch('/api/responses', { method: 'DELETE' });
+    } catch {}
+    localStorage.removeItem('survey_submitted_records');
+    setSubmittedRecords([]);
+    alert('All survey responses have been reset.');
+  };
 
   const fetchSampleData = async () => {
     setIsLoading(true);
@@ -296,33 +422,81 @@ export default function DashboardPage() {
               <GraduationCap className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-                University Life Management Survey
-                <span className="text-xs bg-blue-900/80 text-blue-300 px-2 py-0.5 rounded-full border border-blue-700/50">
-                  Research Dashboard
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                  University Life Management Survey
+                  <span className="text-xs bg-blue-900/80 text-blue-300 px-2 py-0.5 rounded-full border border-blue-700/50">
+                    Research Dashboard
+                  </span>
+                </h1>
+                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-950/80 text-emerald-300 px-2.5 py-0.5 rounded-full border border-emerald-700/60">
+                  <ShieldCheck className="h-3 w-3 text-emerald-400" />
+                  Auto-Save Active • Zero Data Loss
                 </span>
-              </h1>
+              </div>
               <p className="text-xs text-slate-400">
                 Assessing the Need for a University Life Management Foundation Course
               </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Hidden Input for Backup Restore */}
+            <input
+              type="file"
+              id="import-backup-input"
+              accept=".json,.csv"
+              onChange={handleImportJSON}
+              className="hidden"
+            />
+
             <button
-              onClick={() => setShowUrlModal(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition"
-              title="Connect to live Google Sheet"
+              onClick={() => document.getElementById('import-backup-input')?.click()}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition"
+              title="Import or restore survey responses from JSON or CSV"
             >
-              <LinkIcon className="h-3.5 w-3.5 text-blue-400" />
-              {sheetUrl ? 'Sheet Connected' : 'Connect Google Sheet'}
+              <Upload className="h-3.5 w-3.5 text-blue-400" />
+              Import
             </button>
 
             <button
-              onClick={() => (sheetUrl ? fetchFromUrl(sheetUrl) : fetchSampleData())}
+              onClick={handleExportJSON}
+              disabled={allClean.length === 0}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition disabled:opacity-50"
+              title="Download raw JSON backup"
+            >
+              <Database className="h-3.5 w-3.5 text-emerald-400" />
+              Backup
+            </button>
+
+            {submittedRecords.length > 0 && (
+              <button
+                onClick={handleClearAllData}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-950/80 hover:bg-rose-900/90 border border-rose-800 text-rose-300 transition"
+                title="Reset or clear saved survey records"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Reset
+              </button>
+            )}
+
+            <button
+              onClick={() => setShowUrlModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition"
+              title="Connect to live Google Sheet (Optional)"
+            >
+              <LinkIcon className="h-3.5 w-3.5 text-blue-400" />
+              {sheetUrl ? 'Sheet Connected' : 'Google Sheet (Opt)'}
+            </button>
+
+            <button
+              onClick={() => {
+                fetchServerResponses();
+                if (sheetUrl) fetchFromUrl(sheetUrl);
+              }}
               disabled={isLoading}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition"
-              title="Refresh Data"
+              title="Refresh and sync data"
             >
               <RefreshCw className={`h-3.5 w-3.5 text-slate-400 ${isLoading ? 'animate-spin' : ''}`} />
               Sync
@@ -334,7 +508,7 @@ export default function DashboardPage() {
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition"
             >
               <Download className="h-3.5 w-3.5" />
-              Download Clean Excel (.xlsx)
+              Export Clean Excel
             </button>
           </div>
         </div>
@@ -1105,10 +1279,7 @@ export default function DashboardPage() {
         {!isLoading && activeTab === 'survey' && (
           <div className="py-2">
             <SurveyForm
-              onSurveySubmitted={(newRec) => {
-                setSubmittedRecords(prev => [newRec, ...prev]);
-                setActiveTab('dashboard');
-              }}
+              onSurveySubmitted={handleSurveySubmitted}
             />
           </div>
         )}
